@@ -9,10 +9,14 @@ io.on('connection', function(socket){
   console.log("a user connected");
 
   socket.on('disconnect', function(){
-    console.log("Disconnected!");
+    console.log("a user disconnected");
   });
 
   socket.on('login', function(data){
+
+    username = data.username;
+    password = data.password;
+
     console.log("Login data: "+data);
     socket.emit('loginResponse', {'response':'OK'});
   });
