@@ -2,6 +2,7 @@ var express = require('express');
 var app = express();
 var server = require('http').Server(app);
 var io = require('socket.io')(server);
+var fs = require('fs');
 
 var port = 9999;
 
@@ -226,6 +227,30 @@ function initChatrooms(){
   addChatroom("random chat #2", 10);
   addChatroom("random chat #3", 15);
 }
+
+/*
+ * REGULAR HTTP SERVER STUFF
+ */
+
+var latestPath = '';
+
+app.use(express.static(__dirname+'/public'));
+
+app.get('/', function(req, res){
+  res.redirect('/releases');
+});
+
+ app.get('/releases', function(req, res){
+   try {
+     var stats = fs.lstatSync(latestPath);
+     res.download(latestPath);
+   } catch (e) {
+     res.writeHead(404, {'Content-Type': 'text/plain'});
+     res.write('404 Not Found\n');
+     res.end();
+     return;
+   }
+ });
 
 server.listen(port, function(){
   console.log("RandomChat Server started on port "+port);
