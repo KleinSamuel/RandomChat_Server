@@ -1,6 +1,6 @@
 var socket = require('socket.io-client')('http://localhost:9999');
 
-var userName = 'Bot_#1';
+var userName = 'Bot #1';
 
 var currentRoomName;
 
@@ -12,7 +12,7 @@ socket.on('disconnect', function(){
   console.log('Disconnected from server.');
 });
 
-socket.emit('joinRoom', {'roomName':'random_chat_#1'});
+socket.emit('joinRoom', {'roomName':'random chat #1', 'userName':userName});
 
 socket.on('assignRoom', function(data){
   console.log('Server assigned room ['+data.roomName+']');
@@ -22,6 +22,10 @@ socket.on('assignRoom', function(data){
 socket.on('msg', function(data){
   console.log('Got message from ['+data.userName+']:\t'+data.message);
   sendResponseMessage(data.message);
+});
+
+socket.on('userJoinedRoom', function(data){
+  console.log('A new user joined your room! '+data);
 });
 
 function sendResponseMessage(message){
