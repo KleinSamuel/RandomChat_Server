@@ -7,8 +7,9 @@ var port = 9999;
 
 var debug = true;
 
+/* Key = roomName, Value = limit, userlist with socketIDs */
 var chatrooms = {};
-
+/* Key = socketID, Value = name, roomName */
 var userdata = {};
 
 initChatrooms();
@@ -18,6 +19,9 @@ io.on('connection', function(socket){
 
   socket.on('disconnect', function(){
     console.log('a user disconnected ['+socket.id+']');
+    if(userdata[socket.id]){
+      socket.broadcast.in(userdata[socket.id].room).emit('userLeftRoom', {userName: userdata[socket.id].name, socketID: socket.id});
+    }
     removeUserFromAllChatrooms(socket.id);
   });
 
@@ -30,21 +34,27 @@ io.on('connection', function(socket){
 
   socket.on('joinRoom', function(data){
     var roomName = data.roomName;
-    var flag = addUserToChatroom(roomName, socket.id);
+    var userName = data.userName;
+    var flag = addUserToChatroom(roomName, socket.id, userName);
     console.log('User requests to join room ['+roomName+'] --> '+flag);
     if(flag){
       socket.join(roomName);
-      socket.emit('assignRoom', {'roomName':roomName});
+      var usersInRoom = getUsernamesForRoom(roomName, socket.id);
+      socket.emit('assignRoom', {'roomName':roomName, 'limit': chatrooms[roomName].limit, 'userlist':usersInRoom});
+      socket.broadcast.in(roomName).emit('userJoinedRoom', {userName: userName, socketID: socket.id});
     }
   });
 
-  socket.on('joinRandomRoom', function(){
+  socket.on('joinRandomRoom', function(data){
     var roomName = getRandomRoomName();
-    var flag = addUserToChatroom(roomName, socket.id);
+    var userName = data.userName;
+    var flag = addUserToChatroom(roomName, socket.id, userName);
     console.log('User requests to join room ['+roomName+'] --> '+flag);
     if(flag){
       socket.join(roomName);
-      socket.emit('assignRoom', {'roomName':roomName});
+      var usersInRoom = getUsernamesForRoom(roomName, socket.id);
+      socket.emit('assignRoom', {'roomName':roomName, 'limit': chatrooms[roomName].limit, 'userlist':usersInRoom});
+      socket.broadcast.in(roomName).emit('userJoinedRoom', {userName: userName, socketID: socket.id});
     }
   });
 
@@ -56,34 +66,16 @@ io.on('connection', function(socket){
     var message = data.message;
     var roomName = data.roomName;
     console.log('<'+socket.id+'> ['+data.userName+'] in room ['+roomName+'] says ['+message+']');
+    data.socketID = socket.id;
     socket.broadcast.in(roomName).emit('msg', data);
   });
 
   socket.on('leaveRoom', function(data){
+    socket.broadcast.in(data.roomName).emit('userLeftRoom', {userName: userdata[socket.id].name, socketID: socket.id});
     removeUserFromChatroom(data.roomName, socket.id);
   });
 
 });
-
-/* User Object */
-function User(name){
-  this.name = name
-}
-
-function addUser(name){
-  users.push(new User(name));
-  console.log("Current users: "+users.length);
-}
-
-function removeUser(name){
-  for (var i = 0; i < users.length; i++) {
-    if(users[i].name == name){
-      users.splice(i, 1);
-      break;
-    }
-  }
-  console.log("Current users: "+users.length);
-}
 
 /* add a new chatroom */
 function addChatroom(name, limit){
@@ -119,7 +111,8 @@ function getRoomList(){
     var room = chatrooms[i];
     var tmp = {
       name: i,
-      limit: room.limit
+      limit: room.limit,
+      load: room.users.length
     }
     out.push(tmp);
   }
@@ -127,14 +120,15 @@ function getRoomList(){
 }
 
 /* add a given user to a given chatroom */
-function addUserToChatroom(roomName, userName){
+function addUserToChatroom(roomName, socketID, userName){
   flag = false;
   /* check if room exists */
   if(roomName in chatrooms){
     var room = chatrooms[roomName];
     /* check if room is full */
     if(room.users.length < room.limit){
-      room.users.push(userName);
+      room.users.push(socketID);
+      addUserToUserdata(socketID, userName, roomName);
       flag = true;
     }
   }
@@ -143,37 +137,65 @@ function addUserToChatroom(roomName, userName){
 }
 
 /* remove a given user from given chatroom */
-function removeUserFromChatroom(roomName, userName){
+function removeUserFromChatroom(roomName, socketID){
 
-  console.log('Remove user ['+userName+'] from room ['+roomName+']');
+  console.log('Remove user ['+socketID+'] from room ['+roomName+']');
 
   if(roomName in chatrooms){
     var room = chatrooms[roomName];
-    var index = room.users.indexOf(userName);
+    var index = room.users.indexOf(socketID);
     if(index > -1){
       chatrooms[roomName].users.splice(index, 1);
+      removeUserFromUserdata(socketID);
     }
   }
   printChatrooms();
 }
 
-function removeUserFromAllChatrooms(userName){
-  console.log('Remove user ['+userName+'] from all chatrooms');
+function removeUserFromAllChatrooms(socketID){
+  console.log('Remove user ['+socketID+'] from all chatrooms');
   for(var i in chatrooms){
     room = chatrooms[i];
-    var index = room.users.indexOf(userName);
+    var index = room.users.indexOf(socketID);
     if(index > -1){
       room.users.splice(index, 1);
     }
   }
+  removeUserFromUserdata(socketID);
+}
+
+/* add user to userdata */
+function addUserToUserdata(socketID, userName, roomName){
+  userdata[socketID] = {room: roomName, name: userName};
+  printUserdata();
+}
+
+/* remove user from userdata */
+function removeUserFromUserdata(socketID){
+  delete userdata[socketID];
+  printUserdata();
+}
+
+function getUsernamesForRoom(roomName, socketID){
+  var out = [];
+  for(var i = 0; i < chatrooms[roomName].users.length; i++){
+    var userSocketId = chatrooms[roomName].users[i];
+    if(userSocketId != socketID){
+      var tmp = {
+        socketID: userSocketId,
+        name: userdata[userSocketId].name
+      };
+      console.log(userdata[userSocketId]);
+      out.push(tmp);
+    }
+  }
+  return out;
 }
 
 function printChatrooms(){
-
   if(!debug){
     return;
   }
-
   console.log('###');
   for (var i in chatrooms){
     var room = chatrooms[i];
@@ -183,6 +205,17 @@ function printChatrooms(){
     for (var j = 0; j < room.users.length; j++) {
       console.log('\t'+room.users[j]);
     }
+    console.log('###');
+  }
+}
+
+function printUserdata(){
+  console.log('### USERDATA ###');
+  for(var i in userdata){
+    var user = userdata[i];
+    console.log('User ID:\t'+i);
+    console.log('User Name:\t'+user.name);
+    console.log('User Room:\t'+user.room);
     console.log('###');
   }
 }
