@@ -63,6 +63,10 @@ io.on('connection', function(socket){
     socket.emit('receiveRoomList', getRoomList());
   });
 
+  socket.on('requestRoomListUpdate', function(){
+    socket.emit('receiveRoomListUpdate', getRoomList());
+  });
+
   socket.on('msg', function(data){
     var message = data.message;
     var roomName = data.roomName;
@@ -72,7 +76,9 @@ io.on('connection', function(socket){
   });
 
   socket.on('leaveRoom', function(data){
-    socket.broadcast.in(data.roomName).emit('userLeftRoom', {userName: userdata[socket.id].name, socketID: socket.id});
+    if(userdata[socket.id]){
+      socket.broadcast.in(data.roomName).emit('userLeftRoom', {userName: userdata[socket.id].name, socketID: socket.id});
+    }
     removeUserFromChatroom(data.roomName, socket.id);
   });
 
